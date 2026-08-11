@@ -644,6 +644,7 @@ If it's completely unrecognizable as a real player, just create realistic stats 
 
             const payload = {
                 contents: [{ parts: [{ text: promptText }] }],
+                tools: [{ "google_search": {} }], // This enables real-time web searching
                 systemInstruction: { parts: [{ text: "Return JSON only. 'bat' and 'bowl' are ratings 1-99. 'role' must be BAT, BOWL, ALL, or WK. 'type' must be PACE, SPIN, or NA." }]},
                 generationConfig: {
                     responseMimeType: "application/json",
@@ -1257,7 +1258,7 @@ If it's completely unrecognizable as a real player, just create realistic stats 
                         {isScouting && (
                             <div className="bg-slate-800/50 p-6 rounded-xl border border-blue-500/30 flex flex-col items-center justify-center gap-3 animate-pulse">
                                 <span className="text-3xl">✨</span>
-                                <span className="text-sm font-bold text-blue-400 uppercase tracking-widest">Searching Global Timeline...</span>
+                                <span className="text-sm font-bold text-blue-400 uppercase tracking-widest">AI Searching the Web...</span>
                             </div>
                         )}
                         
