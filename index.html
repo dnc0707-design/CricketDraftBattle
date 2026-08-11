@@ -11,11 +11,11 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { initializeApp, getApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        window.Firebase = { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc };
+        window.Firebase = { initializeApp, getApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc };
     </script>
 
     <style>
@@ -182,16 +182,21 @@
 
                     try {
                         const firebaseConfig = {
-                            apiKey: "AIzaSyChQFGYwquYUNX6t-nQ-p-vUYZFPM_YL-w",
-                            authDomain: "cricket-draft-battle.firebaseapp.com",
-                            projectId: "cricket-draft-battle",
-                            storageBucket: "cricket-draft-battle.firebasestorage.app",
-                            messagingSenderId: "1042352117357",
-                            appId: "1:1042352117357:web:2f62d33362d9cd892fd164",
-                            measurementId: "G-BDPNGPB7DC"
+                            apiKey: "AIzaSyBMDqEvc2iXq-_KxzOe39wOdNSMrYn_fmg",
+                            authDomain: "cricket-battle-47372.firebaseapp.com",
+                            projectId: "cricket-battle-47372",
+                            storageBucket: "cricket-battle-47372.firebasestorage.app",
+                            messagingSenderId: "205820717235",
+                            appId: "1:205820717235:web:a9a675cfa8e58344c6a8c6"
                         };
                         
-                        app = window.Firebase.initializeApp(firebaseConfig);
+                        try {
+                            // Check if already initialized to prevent double-init crashes
+                            app = window.Firebase.getApp();
+                        } catch (err) {
+                            app = window.Firebase.initializeApp(firebaseConfig);
+                        }
+                        
                         auth = window.Firebase.getAuth(app);
                         db = window.Firebase.getFirestore(app);
                         setFb({ auth, db });
@@ -207,7 +212,11 @@
                         });
                     } catch (e) {
                         console.warn("Firebase init failed.", e);
-                        setMenuError("Database connection failed. Please check your config.");
+                        if (e.code === 'auth/operation-not-allowed' || e.code === 'auth/admin-restricted-operation') {
+                            setMenuError("Action Required: Enable 'Anonymous' Authentication in your NEW Firebase project settings.");
+                        } else {
+                            setMenuError("Connection failed: " + e.message);
+                        }
                         setLoading(false);
                     }
                 };
