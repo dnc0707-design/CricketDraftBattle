@@ -208,8 +208,13 @@
             if (requiredRole === 'WK') roleContext = " The game rules currently REQUIRE this player to act as a Wicketkeeper. You MUST return 'WK' for role.";
             if (requiredRole === 'BOWL_ALL') roleContext = " The game rules currently REQUIRE this player to act as a Bowler or All-Rounder. You MUST return 'BOWL' or 'ALL' for role.";
 
+            const promptText = `Act as an expert cricket scout. The user searched for: "${playerName}". This might be misspelled, a nickname, or a partial name. 
+First, intelligently identify the most famous real international cricketer they mean (e.g., "sachin" -> "Sachin Tendulkar", "kholi" -> "Virat Kohli", "mcgrath" -> "Glenn McGrath"). 
+Use their CORRECT FULL NAME in the 'name' field. Give accurate historical stats for them. 
+If it's completely unrecognizable as a real player, just create realistic stats for a fictional player with the name "${playerName}".` + roleContext;
+
             const payload = {
-                contents: [{ parts: [{ text: `Act as a cricket scout. Give me accurate historical stats for the cricketer: "${playerName}". If they don't exist, create realistic stats for them.` + roleContext }] }],
+                contents: [{ parts: [{ text: promptText }] }],
                 systemInstruction: { parts: [{ text: "Return JSON only. 'bat' and 'bowl' are ratings 1-99. 'role' must be BAT, BOWL, ALL, or WK. 'type' must be PACE, SPIN, or NA." }]},
                 generationConfig: {
                     responseMimeType: "application/json",
