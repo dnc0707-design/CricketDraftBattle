@@ -174,36 +174,56 @@
 
             useEffect(() => {
                 let app, auth, db;
-                try {
-                    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { projectId: "demo-project" };
-                    app = window.Firebase.initializeApp(firebaseConfig);
-                    auth = window.Firebase.getAuth(app);
-                    db = window.Firebase.getFirestore(app);
-                    setFb({ auth, db });
+                let checkInterval;
 
-                    const initAuth = async () => {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await window.Firebase.signInWithCustomToken(auth, __initial_auth_token);
-                        } else {
-                            await window.Firebase.signInAnonymously(auth);
-                        }
-                    };
-                    initAuth();
+                const initFirebase = async () => {
+                    if (!window.Firebase) return;
+                    if (checkInterval) clearInterval(checkInterval);
 
-                    const unsub = window.Firebase.onAuthStateChanged(auth, (u) => {
-                        setUser(u);
+                    try {
+                        const firebaseConfig = {
+                            apiKey: "AIzaSyChQFGYwquYUNX6t-nQ-p-vUYZFPM_YL-w",
+                            authDomain: "cricket-draft-battle.firebaseapp.com",
+                            projectId: "cricket-draft-battle",
+                            storageBucket: "cricket-draft-battle.firebasestorage.app",
+                            messagingSenderId: "1042352117357",
+                            appId: "1:1042352117357:web:2f62d33362d9cd892fd164",
+                            measurementId: "G-BDPNGPB7DC"
+                        };
+                        
+                        app = window.Firebase.initializeApp(firebaseConfig);
+                        auth = window.Firebase.getAuth(app);
+                        db = window.Firebase.getFirestore(app);
+                        setFb({ auth, db });
+
+                        // Sign in anonymously
+                        await window.Firebase.signInAnonymously(auth);
+
+                        window.Firebase.onAuthStateChanged(auth, (u) => {
+                            if (u) {
+                                setUser(u);
+                                setLoading(false);
+                            }
+                        });
+                    } catch (e) {
+                        console.warn("Firebase init failed.", e);
+                        setMenuError("Database connection failed. Please check your config.");
                         setLoading(false);
-                    });
-                    return () => unsub();
-                } catch (e) {
-                    console.warn("Firebase dev fallback.", e);
-                    setLoading(false);
+                    }
+                };
+
+                if (window.Firebase) {
+                    initFirebase();
+                } else {
+                    checkInterval = setInterval(initFirebase, 200);
                 }
+                
+                return () => { if (checkInterval) clearInterval(checkInterval); };
             }, []);
 
             useEffect(() => {
                 if (!fb || !user || !roomCode) return;
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                const appId = 'cricket-draft-battle-app';
                 const docRef = window.Firebase.doc(fb.db, 'artifacts', appId, 'public', 'data', 'cricket_rooms_v3', roomCode);
                 
                 const unsub = window.Firebase.onSnapshot(docRef, (docSnap) => {
@@ -222,56 +242,74 @@
 
             const updateGame = async (updates) => {
                 if (!fb || !roomCode) return;
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                const appId = 'cricket-draft-battle-app';
                 const docRef = window.Firebase.doc(fb.db, 'artifacts', appId, 'public', 'data', 'cricket_rooms_v3', roomCode);
                 await window.Firebase.updateDoc(docRef, updates);
             };
 
             const createGame = async () => {
-                if (!fb || !user) return;
+                if (!fb || !user) {
+                    setMenuError("Connection error. Please wait or refresh the page.");
+                    return;
+                }
                 if (!localPlayerName.trim()) { setMenuError("Please enter your name"); return; }
-                setMenuError('');
+                setMenuError('Creating room...');
                 
-                const code = generateRoomCode();
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                const docRef = window.Firebase.doc(fb.db, 'artifacts', appId, 'public', 'data', 'cricket_rooms_v3', code);
-                
-                const newGame = {
-                    roomCode: code, view: 'LOBBY', hostUid: user.uid,
-                    format: 'ODI', venue: 'India',
-                    players: [{ uid: user.uid, name: localPlayerName.trim() }],
-                    teams: {}, draft: null, tournament: null, matchInfo: null
-                };
-                await window.Firebase.setDoc(docRef, newGame);
-                setRoomCode(code);
+                try {
+                    const code = generateRoomCode();
+                    const appId = 'cricket-draft-battle-app';
+                    const docRef = window.Firebase.doc(fb.db, 'artifacts', appId, 'public', 'data', 'cricket_rooms_v3', code);
+                    
+                    const newGame = {
+                        roomCode: code, view: 'LOBBY', hostUid: user.uid,
+                        format: 'ODI', venue: 'India',
+                        players: [{ uid: user.uid, name: localPlayerName.trim() }],
+                        teams: {}, draft: null, tournament: null, matchInfo: null
+                    };
+                    await window.Firebase.setDoc(docRef, newGame);
+                    setMenuError('');
+                    setRoomCode(code);
+                } catch (error) {
+                    console.error(error);
+                    setMenuError("Failed to create room: " + error.message);
+                }
             };
 
             const joinGame = async (codeToJoin) => {
-                if (!fb || !user) return;
+                if (!fb || !user) {
+                    setMenuError("Connection error. Please wait or refresh the page.");
+                    return;
+                }
                 if (!localPlayerName.trim()) { setMenuError("Please enter your name"); return; }
                 if (!codeToJoin.trim()) { setMenuError("Please enter a room code"); return; }
-                setMenuError('');
+                setMenuError('Joining room...');
 
-                const code = codeToJoin.toUpperCase().trim();
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                const docRef = window.Firebase.doc(fb.db, 'artifacts', appId, 'public', 'data', 'cricket_rooms_v3', code);
-                
-                const snap = await window.Firebase.getDoc(docRef);
-                if (snap.exists()) {
-                    const data = snap.data();
-                    if (data.view !== 'LOBBY') {
-                        setMenuError("Game has already started!");
-                        return;
+                try {
+                    const code = codeToJoin.toUpperCase().trim();
+                    const appId = 'cricket-draft-battle-app';
+                    const docRef = window.Firebase.doc(fb.db, 'artifacts', appId, 'public', 'data', 'cricket_rooms_v3', code);
+                    
+                    const snap = await window.Firebase.getDoc(docRef);
+                    if (snap.exists()) {
+                        const data = snap.data();
+                        if (data.view !== 'LOBBY') {
+                            setMenuError("Game has already started!");
+                            return;
+                        }
+                        // Avoid duplicate joins if refreshing
+                        const playerExists = data.players.find(p => p.uid === user.uid);
+                        if (!playerExists) {
+                            const newName = data.players.find(p => p.name.toLowerCase() === localPlayerName.toLowerCase()) ? `${localPlayerName} 2` : localPlayerName;
+                            await window.Firebase.updateDoc(docRef, { players: [...data.players, { uid: user.uid, name: newName }] });
+                        }
+                        setMenuError('');
+                        setRoomCode(code);
+                    } else {
+                        setMenuError("Room not found!");
                     }
-                    // Avoid duplicate joins if refreshing
-                    const playerExists = data.players.find(p => p.uid === user.uid);
-                    if (!playerExists) {
-                        const newName = data.players.find(p => p.name.toLowerCase() === localPlayerName.toLowerCase()) ? `${localPlayerName} 2` : localPlayerName;
-                        await window.Firebase.updateDoc(docRef, { players: [...data.players, { uid: user.uid, name: newName }] });
-                    }
-                    setRoomCode(code);
-                } else {
-                    setMenuError("Room not found!");
+                } catch (error) {
+                    console.error(error);
+                    setMenuError("Failed to join room: " + error.message);
                 }
             };
 
