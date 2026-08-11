@@ -127,6 +127,52 @@
             }
         };
 
+        const generateFallbackPlayer = (name, team) => {
+            const wks = team.filter(p => p.role === 'WK').length;
+            const bowlers = team.filter(p => p.role === 'BOWL' || p.role === 'ALL').length;
+            
+            let role = 'BAT';
+            let type = 'NA';
+            
+            const slotsLeft = 11 - team.length;
+            const bowlersNeeded = Math.max(0, 5 - bowlers);
+            const wkNeeded = wks === 0 ? 1 : 0;
+
+            if (wkNeeded > 0 && slotsLeft === wkNeeded) {
+                role = 'WK';
+            } else if (bowlersNeeded > 0 && slotsLeft <= (bowlersNeeded + wkNeeded)) {
+                role = Math.random() > 0.5 ? 'BOWL' : 'ALL';
+            } else {
+                const r = Math.random();
+                if (r < 0.4) role = 'BAT';
+                else if (r < 0.7) role = 'BOWL';
+                else if (r < 0.9) role = 'ALL';
+                else role = 'WK';
+            }
+
+            let bat = Math.floor(Math.random() * 40) + 40; 
+            let bowl = Math.floor(Math.random() * 40) + 10; 
+
+            if (role === 'BOWL' || role === 'ALL') {
+                type = Math.random() > 0.5 ? 'PACE' : 'SPIN';
+                bowl = Math.floor(Math.random() * 25) + 70; // 70-94 rating
+                if (role === 'ALL') bat = Math.floor(Math.random() * 25) + 70;
+                else bat = Math.floor(Math.random() * 30) + 15;
+            } else if (role === 'BAT' || role === 'WK') {
+                bat = Math.floor(Math.random() * 25) + 70; // 70-94 rating
+                bowl = Math.floor(Math.random() * 30) + 15;
+            }
+
+            return {
+                id: 'ai_' + Date.now() + Math.floor(Math.random()*1000),
+                name: name,
+                role: role,
+                bat: bat,
+                bowl: bowl,
+                type: type
+            };
+        };
+
         const simulateDelivery = (batter, bowler, intent = 'NORMAL', delivery = 'GOOD LENGTH', matchPressure = 'MODERATE', pitch = 'India') => {
             let prob = Math.random() * 100;
             let ratingDiff = batter.bat - bowler.bowl;
@@ -211,11 +257,11 @@
                             }
                         });
                     } catch (e) {
-                        console.warn("Firebase init failed.", e);
-                        if (e.code === 'auth/operation-not-allowed' || e.code === 'auth/admin-restricted-operation') {
-                            setMenuError("Action Required: Enable 'Anonymous' Authentication in your NEW Firebase project settings.");
+                        console.error("Firebase init failed.", e);
+                        if (e.code === 'auth/operation-not-allowed') {
+                            setMenuError("Action Required: Enable 'Anonymous' Auth in Firebase Console.");
                         } else {
-                            setMenuError("Connection failed: " + e.message);
+                            setMenuError("Init Error (" + (e.code || "unknown") + "): " + e.message);
                         }
                         setLoading(false);
                     }
@@ -279,8 +325,14 @@
                     setMenuError('');
                     setRoomCode(code);
                 } catch (error) {
-                    console.error(error);
-                    setMenuError("Failed to create room: " + error.message);
+                    console.error("Create Room Error:", error);
+                    if (error.code === 'permission-denied' || (error.message && error.message.includes('permissions'))) {
+                        setMenuError("Database Locked! Go to Firebase > Firestore > Rules and set 'allow read, write: if true;'");
+                    } else if (error.code === 'not-found') {
+                        setMenuError("Database Not Created! Go to Firebase > Firestore Database and click 'Create database'.");
+                    } else {
+                        setMenuError("Failed to create room: " + (error.code || "") + " " + error.message);
+                    }
                 }
             };
 
@@ -488,7 +540,33 @@
                 setIsScouting(true); setErrorMsg(''); setScoutedPlayer(null);
 
                 try {
-                    const data = await fetchPlayerWithGemini(search.trim());
+                    let data;
+                    const myTeam = teams[currentPlayerObj.name] || [];
+                    
+                    try {
+                        data = await fetchPlayerWithGemini(search.trim());
+                    } catch (apiErr) {
+                        console.warn("API Error, using fallback generator.", apiErr);
+                        data = generateFallbackPlayer(search.trim(), myTeam);
+                    }
+                    
+                    // Mandatory composition rules (1 WK, 5 Bowlers)
+                    const wks = myTeam.filter(p => p.role === 'WK').length;
+                    const bowlers = myTeam.filter(p => p.role === 'BOWL' || p.role === 'ALL').length;
+                    const slotsLeft = 11 - myTeam.length;
+                    const bowlersNeeded = Math.max(0, 5 - bowlers);
+                    const wkNeeded = wks === 0 ? 1 : 0;
+
+                    // Override roles to fulfill constraints if needed in final picks
+                    if (wkNeeded > 0 && slotsLeft === wkNeeded && data.role !== 'WK') {
+                        data.role = 'WK';
+                        data.type = 'NA';
+                    } else if (bowlersNeeded > 0 && slotsLeft <= (bowlersNeeded + wkNeeded) && data.role !== 'BOWL' && data.role !== 'ALL') {
+                        data.role = 'ALL';
+                        data.bowl = Math.max(data.bowl, 70); // Ensure they can actually bowl
+                        if(data.type === 'NA') data.type = Math.random() > 0.5 ? 'PACE' : 'SPIN';
+                    }
+                    
                     const similarityCheck = allDraftedNames.find(n => n.includes(data.name.toLowerCase()) || data.name.toLowerCase().includes(n));
                     
                     if (similarityCheck) setErrorMsg(`${data.name} has already been drafted by a manager!`);
